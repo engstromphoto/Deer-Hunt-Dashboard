@@ -3,13 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#111711">
 <title>McMinn County Deer Hunt Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
 <style>
 :root{
   --bg:#111711; --panel:#1a241a; --panel2:#223022; --text:#f3f1e7;
   --muted:#b8c1ae; --accent:#e7a83b; --green:#75a96a; --line:#3b4938;
-  --danger:#d36b5d;
+  --danger:#d36b5d; --blue:#7aa8c7;
 }
 *{box-sizing:border-box}
 body{margin:0;background:linear-gradient(180deg,#0d120d,#172017);color:var(--text);
@@ -25,13 +26,14 @@ label{display:block;color:var(--muted);font-size:.82rem;margin-bottom:5px}
 input,button{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);
 background:#101710;color:var(--text);font-size:1rem}
 button{background:var(--accent);color:#1c160b;border:0;font-weight:800;cursor:pointer}
-button.secondary{background:#334533;color:var(--text)}
 .grid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
 .card h2{font-size:.9rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px}
 .big{font-size:1.75rem;font-weight:850;line-height:1.15}
+.medium{font-size:1.15rem;font-weight:750;line-height:1.4}
 .small{font-size:.88rem;color:var(--muted);margin-top:5px}
 .highlight{border-color:#8d6c2f;background:linear-gradient(145deg,#2a2819,var(--panel))}
+.summary-card{border-color:#6f914f;background:linear-gradient(145deg,#263723,var(--panel))}
 .row{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);padding:8px 0}
 .row:last-child{border-bottom:0}
 .row span:first-child{color:var(--muted)}
@@ -47,9 +49,13 @@ button.secondary{background:#334533;color:var(--text)}
 .full{grid-column:1/-1}
 .notice{padding:12px;border-radius:10px;background:#2d2b1b;color:#eadcae;margin-top:12px}
 .error{background:#3b211f;color:#f3c0b8}
+.periods{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.period{background:#111811;border:1px solid var(--line);border-radius:12px;padding:12px}
+.period h3{margin:0 0 5px;font-size:.85rem;color:var(--muted);text-transform:uppercase}
+.period strong{font-size:1rem}
+.score{display:inline-block;padding:3px 8px;border-radius:999px;background:#34482f;margin-left:6px;font-size:.72rem}
 footer{color:var(--muted);font-size:.78rem;padding:20px 2px 35px;line-height:1.45}
-a{color:#f0bd61}
-@media(max-width:520px){.wrap{padding:12px}.big{font-size:1.5rem}.controls{grid-template-columns:1fr 1fr}.controls .wide{grid-column:1/-1}}
+@media(max-width:650px){.wrap{padding:12px}.big{font-size:1.5rem}.controls{grid-template-columns:1fr 1fr}.controls .wide{grid-column:1/-1}.periods{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -61,18 +67,33 @@ a{color:#f0bd61}
 
 <section class="controls">
 <div><label for="date">Hunt date</label><input id="date" type="date"></div>
+<div><label for="zip">Hunting ZIP code</label><input id="zip" type="text" inputmode="numeric" maxlength="5" value="37303"></div>
 <div><label for="arrival">Arrive before legal light</label><input id="arrival" type="number" min="15" max="180" value="60"></div>
-<div><label for="lat">Latitude</label><input id="lat" type="number" step="0.0001" value="35.4429"></div>
-<div><label for="lon">Longitude</label><input id="lon" type="number" step="0.0001" value="-84.5930"></div>
 <div class="wide"><label>&nbsp;</label><button id="update">Update dashboard</button></div>
-<div class="wide"><label>&nbsp;</label><button class="secondary" id="locate">Use my exact location</button></div>
 </section>
 
 <div class="grid">
+<section class="card summary-card full">
+<h2>Quick hunt summary</h2>
+<div class="big" id="quickHeadline">Choose a date and ZIP code.</div>
+<div class="medium" id="quickSummary" style="margin-top:10px"></div>
+<div class="periods">
+  <div class="period"><h3>Morning</h3><strong id="morningSummary">—</strong></div>
+  <div class="period"><h3>Midday</h3><strong id="middaySummary">—</strong></div>
+  <div class="period"><h3>Evening</h3><strong id="eveningSummary">—</strong></div>
+</div>
+</section>
+
 <section class="card highlight">
 <h2>Recommended arrival</h2>
 <div class="big" id="arrivalTime">—</div>
 <div class="small" id="arrivalNote">Based on your selected setup buffer.</div>
+</section>
+
+<section class="card">
+<h2>Location</h2>
+<div class="big" id="placeName">—</div>
+<div class="small" id="placeDetail">Enter a U.S. ZIP code.</div>
 </section>
 
 <section class="card">
@@ -101,18 +122,10 @@ a{color:#f0bd61}
 <section class="card full">
 <h2>Estimated solunar windows</h2>
 <div class="grid">
-<div>
-<div class="small">Major periods · moon overhead / underfoot</div>
-<div class="big" id="majorWindows">—</div>
+<div><div class="small">Major periods · moon overhead / underfoot</div><div class="big" id="majorWindows">—</div></div>
+<div><div class="small">Minor periods · moonrise / moonset</div><div class="big" id="minorWindows">—</div></div>
 </div>
-<div>
-<div class="small">Minor periods · moonrise / moonset</div>
-<div class="big" id="minorWindows">—</div>
-</div>
-</div>
-<div class="timeline" id="timeline">
-<div class="daybar" id="daybar"></div>
-</div>
+<div class="timeline" id="timeline"><div class="daybar" id="daybar"></div></div>
 <div class="legend">
 <span><i class="dot" style="background:var(--accent)"></i>Major, about 2 hours</span>
 <span><i class="dot" style="background:var(--green)"></i>Minor, about 1 hour</span>
@@ -121,185 +134,123 @@ a{color:#f0bd61}
 </section>
 
 <section class="card full">
-<h2>Weather near selected location</h2>
+<h2>Weather near selected ZIP code</h2>
 <div class="grid">
-<div><div class="small">Morning temperature</div><div class="big" id="temperature">—</div></div>
-<div><div class="small">Wind around sunrise</div><div class="big" id="wind">—</div></div>
+<div><div class="small">Temperature near sunrise</div><div class="big" id="temperature">—</div></div>
+<div><div class="small">Wind near sunrise</div><div class="big" id="wind">—</div></div>
 <div><div class="small">Rain chance</div><div class="big" id="rain">—</div></div>
 <div><div class="small">Pressure trend</div><div class="big" id="pressure">—</div></div>
 </div>
 <div id="weatherNotice" class="notice">Weather loads for dates available in the live forecast.</div>
 </section>
-
-<section class="card full">
-<h2>Morning hunt summary</h2>
-<div class="big" id="summary">—</div>
-<div class="small" id="summaryDetail"></div>
-</section>
 </div>
 
 <footer>
-This dashboard uses SunCalc for astronomical estimates and Open-Meteo for free weather data. Solunar windows are approximate planning aids, not guarantees of deer movement. Wind direction, access route, pressure, food, temperature changes and trail-camera observations should carry more weight. Tennessee general hunting hours for big game are generally 30 minutes before legal sunrise through 30 minutes after legal sunset; always check the current TWRA regulations and any WMA-specific rules before hunting.
+ZIP-code locations are provided by Zippopotam.us. Weather comes from Open-Meteo. Astronomy is calculated with SunCalc. Solunar windows are approximate planning aids, not guarantees of deer movement. Wind direction, access route, pressure, food, temperature changes and trail-camera observations should carry more weight. Tennessee general big-game hours are generally 30 minutes before legal sunrise through 30 minutes after legal sunset; always check current TWRA and WMA-specific rules.
 </footer>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
-const TZ = 'America/New_York';
-
-function localDate(value){
-  const [y,m,d]=value.split('-').map(Number);
-  return new Date(y,m-1,d,12,0,0);
+function localDate(value){const [y,m,d]=value.split('-').map(Number);return new Date(y,m-1,d,12,0,0)}
+function fmt(d){if(!d||isNaN(d))return'—';return d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}
+function addMinutes(d,m){return new Date(d.getTime()+m*60000)}
+function minsOfDay(d){return d.getHours()*60+d.getMinutes()+d.getSeconds()/60}
+function pct(d){return Math.max(0,Math.min(100,minsOfDay(d)/1440*100))}
+function windowText(c,m){return(!c||isNaN(c))?'—':`${fmt(addMinutes(c,-m/2))}–${fmt(addMinutes(c,m/2))}`}
+function phaseName(p){if(p<.03||p>.97)return'New Moon';if(p<.22)return'Waxing Crescent';if(p<.28)return'First Quarter';if(p<.47)return'Waxing Gibbous';if(p<.53)return'Full Moon';if(p<.72)return'Waning Gibbous';if(p<.78)return'Last Quarter';return'Waning Crescent'}
+function moonExtremes(date,lat,lon){let max={alt:-99,date:null},min={alt:99,date:null};const start=new Date(date.getFullYear(),date.getMonth(),date.getDate());for(let i=0;i<144;i++){const t=new Date(start.getTime()+i*600000),a=SunCalc.getMoonPosition(t,lat,lon).altitude;if(a>max.alt)max={alt:a,date:t};if(a<min.alt)min={alt:a,date:t}}return{overhead:max.date,underfoot:min.date}}
+function addWindow(c,center,duration,cls){if(!center||isNaN(center))return;const d=document.createElement('div');d.className=`window ${cls}`;d.style.left=pct(addMinutes(center,-duration/2))+'%';d.style.width=(duration/1440*100)+'%';c.appendChild(d)}
+function addMark(c,time,label){const d=document.createElement('div');d.className='mark';d.style.left=pct(time)+'%';const l=document.createElement('label');l.textContent=label;d.appendChild(l);c.appendChild(d)}
+function compass(deg){return['N','NE','E','SE','S','SW','W','NW'][Math.round(deg/45)%8]}
+function weatherCode(code){if(code===0)return'clear';if(code<=3)return'partly cloudy';if(code<=48)return'foggy';if(code<=67)return'rainy';if(code<=77)return'snowy';if(code<=82)return'showery';if(code<=86)return'snowy';return'stormy'}
+async function geocodeZip(zip){
+  const r=await fetch(`https://api.zippopotam.us/us/${zip}`);
+  if(!r.ok)throw new Error('ZIP code not found');
+  const d=await r.json(),p=d.places[0];
+  return{lat:+p.latitude,lon:+p.longitude,city:p['place name'],state:p['state abbreviation']};
 }
-function fmt(d){
-  if(!d || isNaN(d)) return '—';
-  return d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-}
-function addMinutes(d,m){ return new Date(d.getTime()+m*60000); }
-function minsOfDay(d){ return d.getHours()*60+d.getMinutes()+d.getSeconds()/60; }
-function pct(d){ return Math.max(0,Math.min(100,minsOfDay(d)/1440*100)); }
-function windowText(center,minutes){
-  if(!center || isNaN(center)) return '—';
-  return `${fmt(addMinutes(center,-minutes/2))}–${fmt(addMinutes(center,minutes/2))}`;
-}
-function phaseName(p){
-  if(p < .03 || p > .97) return 'New Moon';
-  if(p < .22) return 'Waxing Crescent';
-  if(p < .28) return 'First Quarter';
-  if(p < .47) return 'Waxing Gibbous';
-  if(p < .53) return 'Full Moon';
-  if(p < .72) return 'Waning Gibbous';
-  if(p < .78) return 'Last Quarter';
-  return 'Waning Crescent';
-}
-function moonExtremes(date,lat,lon){
-  let max={alt:-99,date:null}, min={alt:99,date:null};
-  const start=new Date(date.getFullYear(),date.getMonth(),date.getDate(),0,0,0);
-  for(let i=0;i<144;i++){
-    const t=new Date(start.getTime()+i*10*60000);
-    const alt=SunCalc.getMoonPosition(t,lat,lon).altitude;
-    if(alt>max.alt) max={alt,date:t};
-    if(alt<min.alt) min={alt,date:t};
-  }
-  return {overhead:max.date,underfoot:min.date};
-}
-function addWindow(container,center,duration,cls){
-  if(!center || isNaN(center)) return;
-  const div=document.createElement('div');
-  div.className=`window ${cls}`;
-  let left=pct(addMinutes(center,-duration/2));
-  let width=duration/1440*100;
-  div.style.left=left+'%'; div.style.width=width+'%';
-  container.appendChild(div);
-}
-function addMark(container,time,label){
-  const div=document.createElement('div'); div.className='mark'; div.style.left=pct(time)+'%';
-  const l=document.createElement('label'); l.textContent=label; div.appendChild(l); container.appendChild(div);
-}
-
-async function loadWeather(dateStr,lat,lon,sunrise){
-  const notice=$('weatherNotice');
-  ['temperature','wind','rain','pressure'].forEach(id=>$(id).textContent='—');
+function closestIndex(times,target){let best=0,diff=Infinity;times.forEach((t,i)=>{const x=Math.abs(new Date(t)-target);if(x<diff){diff=x;best=i}});return best}
+async function loadWeather(dateStr,lat,lon,sunrise,sunset){
+  const notice=$('weatherNotice');['temperature','wind','rain','pressure'].forEach(id=>$(id).textContent='—');
   try{
-    const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`+
-      `&hourly=temperature_2m,precipitation_probability,surface_pressure,wind_speed_10m,wind_direction_10m`+
-      `&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FNew_York&start_date=${dateStr}&end_date=${dateStr}`;
-    const res=await fetch(url);
-    if(!res.ok) throw new Error('Forecast not available');
-    const data=await res.json();
-    if(!data.hourly || !data.hourly.time.length) throw new Error('Forecast not available');
-    const targetHour=sunrise.getHours();
-    let idx=data.hourly.time.findIndex(t=>new Date(t).getHours()===targetHour);
-    if(idx<0) idx=0;
-    const dir=data.hourly.wind_direction_10m[idx];
-    const dirs=['N','NE','E','SE','S','SW','W','NW'];
-    const compass=dirs[Math.round(dir/45)%8];
-    $('temperature').textContent=Math.round(data.hourly.temperature_2m[idx])+'°F';
-    $('wind').textContent=`${Math.round(data.hourly.wind_speed_10m[idx])} mph ${compass}`;
-    $('rain').textContent=Math.round(data.hourly.precipitation_probability[idx])+'%';
-    const p=data.hourly.surface_pressure;
-    const before=p[Math.max(0,idx-3)], after=p[Math.min(p.length-1,idx+3)];
-    const diff=after-before;
-    $('pressure').textContent=diff>.8?'Rising':diff<-.8?'Falling':'Steady';
-    notice.className='notice';
-    notice.textContent='Live forecast loaded from Open-Meteo. Recheck the night before and again before leaving.';
-    return {temp:data.hourly.temperature_2m[idx],wind:data.hourly.wind_speed_10m[idx],rain:data.hourly.precipitation_probability[idx],trend:diff};
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation_probability,surface_pressure,wind_speed_10m,wind_direction_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&start_date=${dateStr}&end_date=${dateStr}`;
+    const r=await fetch(url);if(!r.ok)throw new Error();const d=await r.json();if(!d.hourly?.time?.length)throw new Error();
+    const iSun=closestIndex(d.hourly.time,sunrise),iNoon=closestIndex(d.hourly.time,new Date(sunrise.getFullYear(),sunrise.getMonth(),sunrise.getDate(),12)),iEve=closestIndex(d.hourly.time,addMinutes(sunset,-90));
+    const p=d.hourly.surface_pressure,before=p[Math.max(0,iSun-3)],after=p[Math.min(p.length-1,iSun+3)],trend=after-before;
+    $('temperature').textContent=Math.round(d.hourly.temperature_2m[iSun])+'°F';
+    $('wind').textContent=`${Math.round(d.hourly.wind_speed_10m[iSun])} mph ${compass(d.hourly.wind_direction_10m[iSun])}`;
+    $('rain').textContent=Math.round(d.daily.precipitation_probability_max[0])+'%';
+    $('pressure').textContent=trend>.8?'Rising':trend<-.8?'Falling':'Steady';
+    notice.className='notice';notice.textContent='Forecast loaded. Recheck the night before and again before leaving.';
+    return{
+      sunrise:{temp:d.hourly.temperature_2m[iSun],wind:d.hourly.wind_speed_10m[iSun],dir:compass(d.hourly.wind_direction_10m[iSun]),rain:d.hourly.precipitation_probability[iSun],condition:weatherCode(d.hourly.weather_code[iSun])},
+      noon:{temp:d.hourly.temperature_2m[iNoon],wind:d.hourly.wind_speed_10m[iNoon],dir:compass(d.hourly.wind_direction_10m[iNoon]),rain:d.hourly.precipitation_probability[iNoon],condition:weatherCode(d.hourly.weather_code[iNoon])},
+      evening:{temp:d.hourly.temperature_2m[iEve],wind:d.hourly.wind_speed_10m[iEve],dir:compass(d.hourly.wind_direction_10m[iEve]),rain:d.hourly.precipitation_probability[iEve],condition:weatherCode(d.hourly.weather_code[iEve])},
+      high:d.daily.temperature_2m_max[0],low:d.daily.temperature_2m_min[0],rainMax:d.daily.precipitation_probability_max[0],trend
+    };
   }catch(e){
-    notice.className='notice';
-    notice.textContent='Live weather is not available for this date yet. Astronomy and hunting-time calculations still work. Weather usually appears when the date enters the forecast window.';
+    notice.className='notice';notice.textContent='Live weather is not available for this date yet. Astronomy and hunt-time calculations still work.';
     return null;
   }
 }
-
-async function update(){
-  const dateStr=$('date').value;
-  const lat=parseFloat($('lat').value), lon=parseFloat($('lon').value);
-  const buffer=parseInt($('arrival').value)||60;
-  if(!dateStr || isNaN(lat)||isNaN(lon)) return;
-  const date=localDate(dateStr);
-  const sun=SunCalc.getTimes(date,lat,lon);
-  const moon=SunCalc.getMoonTimes(date,lat,lon,true);
-  const illum=SunCalc.getMoonIllumination(date);
-  const ext=moonExtremes(date,lat,lon);
-  const legalStart=addMinutes(sun.sunrise,-30), legalEnd=addMinutes(sun.sunset,30);
-  const arrival=addMinutes(legalStart,-buffer);
-
-  $('arrivalTime').textContent=fmt(arrival);
-  $('arrivalNote').textContent=`Leaves ${buffer} minutes to walk in, settle down and let the woods quiet before legal light.`;
-  $('legalStart').textContent=fmt(legalStart);
-  $('legalEnd').textContent=fmt(legalEnd);
-  $('sunrise').textContent=fmt(sun.sunrise);
-  $('sunset').textContent=fmt(sun.sunset);
-  $('dawn').textContent=fmt(sun.dawn);
-  $('dusk').textContent=fmt(sun.dusk);
-  $('moonPhase').textContent=phaseName(illum.phase);
-  $('illumination').textContent=`${Math.round(illum.fraction*100)}% illuminated`;
-  $('moonrise').textContent=fmt(moon.rise);
-  $('moonset').textContent=fmt(moon.set);
-  $('majorWindows').innerHTML=`${windowText(ext.overhead,120)}<br>${windowText(ext.underfoot,120)}`;
-  const minors=[moon.rise,moon.set].filter(Boolean);
-  $('minorWindows').innerHTML=minors.length?minors.map(x=>windowText(x,60)).join('<br>'):'No local rise/set event';
-
-  const tl=$('timeline'); tl.innerHTML='<div class="daybar" id="daybar"></div>';
-  const daybar=$('daybar');
-  daybar.style.left=pct(sun.sunrise)+'%';
-  daybar.style.width=(pct(sun.sunset)-pct(sun.sunrise))+'%';
-  addWindow(tl,ext.overhead,120,'major'); addWindow(tl,ext.underfoot,120,'major');
-  if(moon.rise) addWindow(tl,moon.rise,60,'minor');
-  if(moon.set) addWindow(tl,moon.set,60,'minor');
-  addMark(tl,sun.sunrise,'Sunrise'); addMark(tl,sun.sunset,'Sunset');
-
-  const weather=await loadWeather(dateStr,lat,lon,sun.sunrise);
-  const morningMajor=[ext.overhead,ext.underfoot].find(x=>x && minsOfDay(x)>=minsOfDay(legalStart)-60 && minsOfDay(x)<=12*60);
-  const morningMinor=[moon.rise,moon.set].find(x=>x && minsOfDay(x)>=minsOfDay(legalStart)-60 && minsOfDay(x)<=12*60);
-  let headline=`Be parked and walking by ${fmt(arrival)}. Legal shooting begins at ${fmt(legalStart)}.`;
-  let details=[];
-  if(morningMajor) details.push(`A major solunar window centers near ${fmt(morningMajor)}.`);
-  else if(morningMinor) details.push(`A minor solunar window centers near ${fmt(morningMinor)}.`);
-  else details.push('No strong solunar peak overlaps the early-morning hunt, so prioritize bedding-to-food travel and wind.');
-  if(weather){
-    if(weather.wind>=12) details.push('Forecast wind is fairly strong; favor sheltered terrain and double-check thermals.');
-    if(weather.rain>=40) details.push('Rain chances are meaningful; movement may improve around the start or end of the rain.');
-    if(weather.trend>0.8) details.push('Pressure is forecast to rise, which can be a favorable post-front pattern.');
-  }
-  $('summary').textContent=headline;
-  $('summaryDetail').textContent=details.join(' ');
+function overlapWindow(center,start,end,radius){return center&&minsOfDay(center)+radius>=minsOfDay(start)&&minsOfDay(center)-radius<=minsOfDay(end)}
+function bestWindowText(ext,moon,start,end){
+  const options=[
+    {name:'major',c:ext.overhead,r:60},{name:'major',c:ext.underfoot,r:60},
+    {name:'minor',c:moon.rise,r:30},{name:'minor',c:moon.set,r:30}
+  ].filter(x=>overlapWindow(x.c,start,end,x.r));
+  if(!options.length)return'No solunar peak';
+  options.sort((a,b)=>(a.name==='major'?-1:1)-(b.name==='major'?-1:1));
+  return `${options[0].name[0].toUpperCase()+options[0].name.slice(1)} peak near ${fmt(options[0].c)}`;
 }
-
-$('update').addEventListener('click',update);
-$('date').addEventListener('change',update);
-$('arrival').addEventListener('change',update);
-$('locate').addEventListener('click',()=>{
-  if(!navigator.geolocation){alert('Location is not supported by this browser.');return;}
-  navigator.geolocation.getCurrentPosition(pos=>{
-    $('lat').value=pos.coords.latitude.toFixed(4);
-    $('lon').value=pos.coords.longitude.toFixed(4);
-    update();
-  },()=>alert('Location permission was not granted.'));
-});
-const today=new Date();
-$('date').value=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-update();
+async function update(){
+  const dateStr=$('date').value,zip=$('zip').value.trim(),buffer=parseInt($('arrival').value)||60;
+  if(!/^\d{5}$/.test(zip)){alert('Enter a valid 5-digit ZIP code.');return}
+  $('quickHeadline').textContent='Loading hunt conditions…';$('quickSummary').textContent='';
+  try{
+    const loc=await geocodeZip(zip);$('placeName').textContent=`${loc.city}, ${loc.state}`;$('placeDetail').textContent=`ZIP ${zip}`;
+    const date=localDate(dateStr),sun=SunCalc.getTimes(date,loc.lat,loc.lon),moon=SunCalc.getMoonTimes(date,loc.lat,loc.lon,true),illum=SunCalc.getMoonIllumination(date),ext=moonExtremes(date,loc.lat,loc.lon);
+    const legalStart=addMinutes(sun.sunrise,-30),legalEnd=addMinutes(sun.sunset,30),arrival=addMinutes(legalStart,-buffer);
+    $('arrivalTime').textContent=fmt(arrival);$('arrivalNote').textContent=`Leaves ${buffer} minutes to walk in, settle down and let the woods quiet before legal light.`;
+    $('legalStart').textContent=fmt(legalStart);$('legalEnd').textContent=fmt(legalEnd);
+    $('sunrise').textContent=fmt(sun.sunrise);$('sunset').textContent=fmt(sun.sunset);$('dawn').textContent=fmt(sun.dawn);$('dusk').textContent=fmt(sun.dusk);
+    $('moonPhase').textContent=phaseName(illum.phase);$('illumination').textContent=`${Math.round(illum.fraction*100)}% illuminated`;
+    $('moonrise').textContent=fmt(moon.rise);$('moonset').textContent=fmt(moon.set);
+    $('majorWindows').innerHTML=`${windowText(ext.overhead,120)}<br>${windowText(ext.underfoot,120)}`;
+    const minors=[moon.rise,moon.set].filter(Boolean);$('minorWindows').innerHTML=minors.length?minors.map(x=>windowText(x,60)).join('<br>'):'No local rise/set event';
+    const tl=$('timeline');tl.innerHTML='<div class="daybar" id="daybar"></div>';const daybar=$('daybar');daybar.style.left=pct(sun.sunrise)+'%';daybar.style.width=(pct(sun.sunset)-pct(sun.sunrise))+'%';
+    addWindow(tl,ext.overhead,120,'major');addWindow(tl,ext.underfoot,120,'major');if(moon.rise)addWindow(tl,moon.rise,60,'minor');if(moon.set)addWindow(tl,moon.set,60,'minor');addMark(tl,sun.sunrise,'Sunrise');addMark(tl,sun.sunset,'Sunset');
+    const w=await loadWeather(dateStr,loc.lat,loc.lon,sun.sunrise,sun.sunset);
+    const morningEnd=new Date(date.getFullYear(),date.getMonth(),date.getDate(),10,30),midStart=new Date(date.getFullYear(),date.getMonth(),date.getDate(),10,30),midEnd=new Date(date.getFullYear(),date.getMonth(),date.getDate(),14,30),eveStart=new Date(date.getFullYear(),date.getMonth(),date.getDate(),14,30);
+    const mPeak=bestWindowText(ext,moon,legalStart,morningEnd),nPeak=bestWindowText(ext,moon,midStart,midEnd),ePeak=bestWindowText(ext,moon,eveStart,legalEnd);
+    if(w){
+      $('morningSummary').textContent=`${mPeak}. ${Math.round(w.sunrise.temp)}°, ${w.sunrise.wind.toFixed(0)} mph ${w.sunrise.dir}, ${w.sunrise.rain}% rain.`;
+      $('middaySummary').textContent=`${nPeak}. Near ${Math.round(w.noon.temp)}°, ${w.noon.wind.toFixed(0)} mph ${w.noon.dir}.`;
+      $('eveningSummary').textContent=`${ePeak}. Near ${Math.round(w.evening.temp)}°, ${w.evening.wind.toFixed(0)} mph ${w.evening.dir}, ${w.evening.rain}% rain.`;
+      let expect=`Expect a ${w.low.toFixed(0)}°–${w.high.toFixed(0)}° day with ${w.rainMax}% maximum rain chance. `;
+      if(w.sunrise.wind<5)expect+='Early wind looks light, so thermals may matter more than the forecast direction. ';
+      else if(w.sunrise.wind>=12)expect+='Morning wind is fairly strong; sheltered terrain may hunt better. ';
+      else expect+='Morning wind should be workable if your stand matches the direction. ';
+      if(w.trend>.8)expect+='Pressure is rising, which may help movement after a front.';
+      else if(w.trend<-.8)expect+='Pressure is falling, so watch for movement ahead of changing weather.';
+      else expect+='Pressure looks steady.';
+      $('quickHeadline').textContent=`Be parked by ${fmt(arrival)}. Legal light starts at ${fmt(legalStart)}.`;
+      $('quickSummary').textContent=expect;
+    }else{
+      $('morningSummary').textContent=mPeak+'. Focus on first-light travel from feeding to bedding.';
+      $('middaySummary').textContent=nPeak+'. Check weather closer to the hunt date.';
+      $('eveningSummary').textContent=ePeak+'. Be settled well before the final feeding movement.';
+      $('quickHeadline').textContent=`Be parked by ${fmt(arrival)}. Legal light starts at ${fmt(legalStart)}.`;
+      $('quickSummary').textContent=`Weather is not available yet. The best astronomy-based windows are shown below; recheck once the date enters the forecast range.`;
+    }
+  }catch(e){
+    $('quickHeadline').textContent='Could not load that ZIP code.';$('quickSummary').textContent='Check the ZIP code and your internet connection.';
+    $('placeName').textContent='Not found';$('placeDetail').textContent='Enter a valid U.S. ZIP code.';
+  }
+}
+$('update').addEventListener('click',update);$('date').addEventListener('change',update);$('zip').addEventListener('change',update);$('arrival').addEventListener('change',update);
+const today=new Date();$('date').value=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;update();
 </script>
 </body>
 </html>
