@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>McMinn County Deer Hunt Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+<style>
+:root{
+  --bg:#111711; --panel:#1a241a; --panel2:#223022; --text:#f3f1e7;
+  --muted:#b8c1ae; --accent:#e7a83b; --green:#75a96a; --line:#3b4938;
+  --danger:#d36b5d;
+}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(180deg,#0d120d,#172017);color:var(--text);
+font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;min-height:100vh}
+.wrap{max-width:1050px;margin:auto;padding:18px}
+header{padding:18px 0 10px}
+h1{font-size:clamp(1.7rem,5vw,2.6rem);margin:0 0 6px}
+.subtitle{color:var(--muted);margin:0}
+.controls,.grid{display:grid;gap:12px}
+.controls{grid-template-columns:repeat(auto-fit,minmax(190px,1fr));background:var(--panel);
+border:1px solid var(--line);padding:14px;border-radius:16px;margin:16px 0}
+label{display:block;color:var(--muted);font-size:.82rem;margin-bottom:5px}
+input,button{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);
+background:#101710;color:var(--text);font-size:1rem}
+button{background:var(--accent);color:#1c160b;border:0;font-weight:800;cursor:pointer}
+button.secondary{background:#334533;color:var(--text)}
+.grid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+.card h2{font-size:.9rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px}
+.big{font-size:1.75rem;font-weight:850;line-height:1.15}
+.small{font-size:.88rem;color:var(--muted);margin-top:5px}
+.highlight{border-color:#8d6c2f;background:linear-gradient(145deg,#2a2819,var(--panel))}
+.row{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);padding:8px 0}
+.row:last-child{border-bottom:0}
+.row span:first-child{color:var(--muted)}
+.timeline{position:relative;height:74px;margin-top:10px;background:#0d140d;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+.daybar{position:absolute;top:0;bottom:0;background:linear-gradient(90deg,#362f25,#9c7331,#d8b65b,#9c7331,#362f25);opacity:.75}
+.mark{position:absolute;top:0;bottom:0;width:2px;background:white}
+.mark label{position:absolute;top:5px;transform:translateX(-50%);white-space:nowrap;font-size:.72rem;color:white}
+.window{position:absolute;height:18px;border-radius:8px;opacity:.85}
+.major{top:44px;background:var(--accent)}
+.minor{top:23px;background:var(--green)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.78rem;color:var(--muted);margin-top:8px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}
+.full{grid-column:1/-1}
+.notice{padding:12px;border-radius:10px;background:#2d2b1b;color:#eadcae;margin-top:12px}
+.error{background:#3b211f;color:#f3c0b8}
+footer{color:var(--muted);font-size:.78rem;padding:20px 2px 35px;line-height:1.45}
+a{color:#f0bd61}
+@media(max-width:520px){.wrap{padding:12px}.big{font-size:1.5rem}.controls{grid-template-columns:1fr 1fr}.controls .wide{grid-column:1/-1}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<h1>McMinn County Deer Hunt Dashboard</h1>
+<p class="subtitle">Sun, moon, weather, legal light and estimated deer-movement windows.</p>
+</header>
+
+<section class="controls">
+<div><label for="date">Hunt date</label><input id="date" type="date"></div>
+<div><label for="arrival">Arrive before legal light</label><input id="arrival" type="number" min="15" max="180" value="60"></div>
+<div><label for="lat">Latitude</label><input id="lat" type="number" step="0.0001" value="35.4429"></div>
+<div><label for="lon">Longitude</label><input id="lon" type="number" step="0.0001" value="-84.5930"></div>
+<div class="wide"><label>&nbsp;</label><button id="update">Update dashboard</button></div>
+<div class="wide"><label>&nbsp;</label><button class="secondary" id="locate">Use my exact location</button></div>
+</section>
+
+<div class="grid">
+<section class="card highlight">
+<h2>Recommended arrival</h2>
+<div class="big" id="arrivalTime">—</div>
+<div class="small" id="arrivalNote">Based on your selected setup buffer.</div>
+</section>
+
+<section class="card">
+<h2>Tennessee legal deer light</h2>
+<div class="big" id="legalStart">—</div>
+<div class="small">Legal start · 30 minutes before sunrise</div>
+<div class="row"><span>Legal end</span><strong id="legalEnd">—</strong></div>
+</section>
+
+<section class="card">
+<h2>Sun</h2>
+<div class="row"><span>Sunrise</span><strong id="sunrise">—</strong></div>
+<div class="row"><span>Sunset</span><strong id="sunset">—</strong></div>
+<div class="row"><span>Civil dawn</span><strong id="dawn">—</strong></div>
+<div class="row"><span>Civil dusk</span><strong id="dusk">—</strong></div>
+</section>
+
+<section class="card">
+<h2>Moon</h2>
+<div class="big" id="moonPhase">—</div>
+<div class="small" id="illumination">—</div>
+<div class="row"><span>Moonrise</span><strong id="moonrise">—</strong></div>
+<div class="row"><span>Moonset</span><strong id="moonset">—</strong></div>
+</section>
+
+<section class="card full">
+<h2>Estimated solunar windows</h2>
+<div class="grid">
+<div>
+<div class="small">Major periods · moon overhead / underfoot</div>
+<div class="big" id="majorWindows">—</div>
+</div>
+<div>
+<div class="small">Minor periods · moonrise / moonset</div>
+<div class="big" id="minorWindows">—</div>
+</div>
+</div>
+<div class="timeline" id="timeline">
+<div class="daybar" id="daybar"></div>
+</div>
+<div class="legend">
+<span><i class="dot" style="background:var(--accent)"></i>Major, about 2 hours</span>
+<span><i class="dot" style="background:var(--green)"></i>Minor, about 1 hour</span>
+<span>White marks: sunrise and sunset</span>
+</div>
+</section>
+
+<section class="card full">
+<h2>Weather near selected location</h2>
+<div class="grid">
+<div><div class="small">Morning temperature</div><div class="big" id="temperature">—</div></div>
+<div><div class="small">Wind around sunrise</div><div class="big" id="wind">—</div></div>
+<div><div class="small">Rain chance</div><div class="big" id="rain">—</div></div>
+<div><div class="small">Pressure trend</div><div class="big" id="pressure">—</div></div>
+</div>
+<div id="weatherNotice" class="notice">Weather loads for dates available in the live forecast.</div>
+</section>
+
+<section class="card full">
+<h2>Morning hunt summary</h2>
+<div class="big" id="summary">—</div>
+<div class="small" id="summaryDetail"></div>
+</section>
+</div>
+
+<footer>
+This dashboard uses SunCalc for astronomical estimates and Open-Meteo for free weather data. Solunar windows are approximate planning aids, not guarantees of deer movement. Wind direction, access route, pressure, food, temperature changes and trail-camera observations should carry more weight. Tennessee general hunting hours for big game are generally 30 minutes before legal sunrise through 30 minutes after legal sunset; always check the current TWRA regulations and any WMA-specific rules before hunting.
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const TZ = 'America/New_York';
+
+function localDate(value){
+  const [y,m,d]=value.split('-').map(Number);
+  return new Date(y,m-1,d,12,0,0);
+}
+function fmt(d){
+  if(!d || isNaN(d)) return '—';
+  return d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+}
+function addMinutes(d,m){ return new Date(d.getTime()+m*60000); }
+function minsOfDay(d){ return d.getHours()*60+d.getMinutes()+d.getSeconds()/60; }
+function pct(d){ return Math.max(0,Math.min(100,minsOfDay(d)/1440*100)); }
+function windowText(center,minutes){
+  if(!center || isNaN(center)) return '—';
+  return `${fmt(addMinutes(center,-minutes/2))}–${fmt(addMinutes(center,minutes/2))}`;
+}
+function phaseName(p){
+  if(p < .03 || p > .97) return 'New Moon';
+  if(p < .22) return 'Waxing Crescent';
+  if(p < .28) return 'First Quarter';
+  if(p < .47) return 'Waxing Gibbous';
+  if(p < .53) return 'Full Moon';
+  if(p < .72) return 'Waning Gibbous';
+  if(p < .78) return 'Last Quarter';
+  return 'Waning Crescent';
+}
+function moonExtremes(date,lat,lon){
+  let max={alt:-99,date:null}, min={alt:99,date:null};
+  const start=new Date(date.getFullYear(),date.getMonth(),date.getDate(),0,0,0);
+  for(let i=0;i<144;i++){
+    const t=new Date(start.getTime()+i*10*60000);
+    const alt=SunCalc.getMoonPosition(t,lat,lon).altitude;
+    if(alt>max.alt) max={alt,date:t};
+    if(alt<min.alt) min={alt,date:t};
+  }
+  return {overhead:max.date,underfoot:min.date};
+}
+function addWindow(container,center,duration,cls){
+  if(!center || isNaN(center)) return;
+  const div=document.createElement('div');
+  div.className=`window ${cls}`;
+  let left=pct(addMinutes(center,-duration/2));
+  let width=duration/1440*100;
+  div.style.left=left+'%'; div.style.width=width+'%';
+  container.appendChild(div);
+}
+function addMark(container,time,label){
+  const div=document.createElement('div'); div.className='mark'; div.style.left=pct(time)+'%';
+  const l=document.createElement('label'); l.textContent=label; div.appendChild(l); container.appendChild(div);
+}
+
+async function loadWeather(dateStr,lat,lon,sunrise){
+  const notice=$('weatherNotice');
+  ['temperature','wind','rain','pressure'].forEach(id=>$(id).textContent='—');
+  try{
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`+
+      `&hourly=temperature_2m,precipitation_probability,surface_pressure,wind_speed_10m,wind_direction_10m`+
+      `&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FNew_York&start_date=${dateStr}&end_date=${dateStr}`;
+    const res=await fetch(url);
+    if(!res.ok) throw new Error('Forecast not available');
+    const data=await res.json();
+    if(!data.hourly || !data.hourly.time.length) throw new Error('Forecast not available');
+    const targetHour=sunrise.getHours();
+    let idx=data.hourly.time.findIndex(t=>new Date(t).getHours()===targetHour);
+    if(idx<0) idx=0;
+    const dir=data.hourly.wind_direction_10m[idx];
+    const dirs=['N','NE','E','SE','S','SW','W','NW'];
+    const compass=dirs[Math.round(dir/45)%8];
+    $('temperature').textContent=Math.round(data.hourly.temperature_2m[idx])+'°F';
+    $('wind').textContent=`${Math.round(data.hourly.wind_speed_10m[idx])} mph ${compass}`;
+    $('rain').textContent=Math.round(data.hourly.precipitation_probability[idx])+'%';
+    const p=data.hourly.surface_pressure;
+    const before=p[Math.max(0,idx-3)], after=p[Math.min(p.length-1,idx+3)];
+    const diff=after-before;
+    $('pressure').textContent=diff>.8?'Rising':diff<-.8?'Falling':'Steady';
+    notice.className='notice';
+    notice.textContent='Live forecast loaded from Open-Meteo. Recheck the night before and again before leaving.';
+    return {temp:data.hourly.temperature_2m[idx],wind:data.hourly.wind_speed_10m[idx],rain:data.hourly.precipitation_probability[idx],trend:diff};
+  }catch(e){
+    notice.className='notice';
+    notice.textContent='Live weather is not available for this date yet. Astronomy and hunting-time calculations still work. Weather usually appears when the date enters the forecast window.';
+    return null;
+  }
+}
+
+async function update(){
+  const dateStr=$('date').value;
+  const lat=parseFloat($('lat').value), lon=parseFloat($('lon').value);
+  const buffer=parseInt($('arrival').value)||60;
+  if(!dateStr || isNaN(lat)||isNaN(lon)) return;
+  const date=localDate(dateStr);
+  const sun=SunCalc.getTimes(date,lat,lon);
+  const moon=SunCalc.getMoonTimes(date,lat,lon,true);
+  const illum=SunCalc.getMoonIllumination(date);
+  const ext=moonExtremes(date,lat,lon);
+  const legalStart=addMinutes(sun.sunrise,-30), legalEnd=addMinutes(sun.sunset,30);
+  const arrival=addMinutes(legalStart,-buffer);
+
+  $('arrivalTime').textContent=fmt(arrival);
+  $('arrivalNote').textContent=`Leaves ${buffer} minutes to walk in, settle down and let the woods quiet before legal light.`;
+  $('legalStart').textContent=fmt(legalStart);
+  $('legalEnd').textContent=fmt(legalEnd);
+  $('sunrise').textContent=fmt(sun.sunrise);
+  $('sunset').textContent=fmt(sun.sunset);
+  $('dawn').textContent=fmt(sun.dawn);
+  $('dusk').textContent=fmt(sun.dusk);
+  $('moonPhase').textContent=phaseName(illum.phase);
+  $('illumination').textContent=`${Math.round(illum.fraction*100)}% illuminated`;
+  $('moonrise').textContent=fmt(moon.rise);
+  $('moonset').textContent=fmt(moon.set);
+  $('majorWindows').innerHTML=`${windowText(ext.overhead,120)}<br>${windowText(ext.underfoot,120)}`;
+  const minors=[moon.rise,moon.set].filter(Boolean);
+  $('minorWindows').innerHTML=minors.length?minors.map(x=>windowText(x,60)).join('<br>'):'No local rise/set event';
+
+  const tl=$('timeline'); tl.innerHTML='<div class="daybar" id="daybar"></div>';
+  const daybar=$('daybar');
+  daybar.style.left=pct(sun.sunrise)+'%';
+  daybar.style.width=(pct(sun.sunset)-pct(sun.sunrise))+'%';
+  addWindow(tl,ext.overhead,120,'major'); addWindow(tl,ext.underfoot,120,'major');
+  if(moon.rise) addWindow(tl,moon.rise,60,'minor');
+  if(moon.set) addWindow(tl,moon.set,60,'minor');
+  addMark(tl,sun.sunrise,'Sunrise'); addMark(tl,sun.sunset,'Sunset');
+
+  const weather=await loadWeather(dateStr,lat,lon,sun.sunrise);
+  const morningMajor=[ext.overhead,ext.underfoot].find(x=>x && minsOfDay(x)>=minsOfDay(legalStart)-60 && minsOfDay(x)<=12*60);
+  const morningMinor=[moon.rise,moon.set].find(x=>x && minsOfDay(x)>=minsOfDay(legalStart)-60 && minsOfDay(x)<=12*60);
+  let headline=`Be parked and walking by ${fmt(arrival)}. Legal shooting begins at ${fmt(legalStart)}.`;
+  let details=[];
+  if(morningMajor) details.push(`A major solunar window centers near ${fmt(morningMajor)}.`);
+  else if(morningMinor) details.push(`A minor solunar window centers near ${fmt(morningMinor)}.`);
+  else details.push('No strong solunar peak overlaps the early-morning hunt, so prioritize bedding-to-food travel and wind.');
+  if(weather){
+    if(weather.wind>=12) details.push('Forecast wind is fairly strong; favor sheltered terrain and double-check thermals.');
+    if(weather.rain>=40) details.push('Rain chances are meaningful; movement may improve around the start or end of the rain.');
+    if(weather.trend>0.8) details.push('Pressure is forecast to rise, which can be a favorable post-front pattern.');
+  }
+  $('summary').textContent=headline;
+  $('summaryDetail').textContent=details.join(' ');
+}
+
+$('update').addEventListener('click',update);
+$('date').addEventListener('change',update);
+$('arrival').addEventListener('change',update);
+$('locate').addEventListener('click',()=>{
+  if(!navigator.geolocation){alert('Location is not supported by this browser.');return;}
+  navigator.geolocation.getCurrentPosition(pos=>{
+    $('lat').value=pos.coords.latitude.toFixed(4);
+    $('lon').value=pos.coords.longitude.toFixed(4);
+    update();
+  },()=>alert('Location permission was not granted.'));
+});
+const today=new Date();
+$('date').value=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+update();
+</script>
+</body>
+</html>
