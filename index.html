@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#111711">
 <title>McMinn County Deer Hunt Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 :root{
   --bg:#111711; --panel:#1a241a; --panel2:#223022; --text:#f3f1e7;
@@ -54,6 +56,22 @@ button{background:var(--accent);color:#1c160b;border:0;font-weight:800;cursor:po
 .period h3{margin:0 0 5px;font-size:.85rem;color:var(--muted);text-transform:uppercase}
 .period strong{font-size:1rem}
 .score{display:inline-block;padding:3px 8px;border-radius:999px;background:#34482f;margin-left:6px;font-size:.72rem}
+#propertyMap{height:min(68vh,620px);min-height:430px;border-radius:14px;border:1px solid var(--line);background:#101710}
+.map-tools{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin:12px 0}
+.map-tools button{background:var(--panel2);color:var(--text);border:1px solid var(--line);font-size:.86rem;padding:9px}
+.map-tools button.active{background:var(--accent);color:#1c160b}
+.map-status{margin:8px 0;color:var(--muted);font-size:.82rem}
+.map-legend{display:flex;flex-wrap:wrap;gap:12px;margin:10px 0;font-size:.8rem;color:var(--muted)}
+.map-icon{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;border:2px solid white;box-shadow:0 2px 8px #0008;font-size:15px}
+.map-icon.stand{background:#e7a83b}.map-icon.camera{background:#7aa8c7}.map-icon.bait{background:#75a96a}.map-icon.sign{background:#d36b5d}
+select,textarea{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:#101710;color:var(--text);font:inherit}
+.log-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;margin-top:12px}
+.log-form textarea{grid-column:1/-1;min-height:72px}
+.log-list{display:grid;gap:8px;margin-top:12px}
+.log-entry{background:#111811;border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;justify-content:space-between;gap:10px}
+.danger-btn{background:#3b211f!important;color:#f3c0b8!important}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#1a241a;color:#f3f1e7}
+.leaflet-popup-content button{margin-top:6px}
 footer{color:var(--muted);font-size:.78rem;padding:20px 2px 35px;line-height:1.45}
 @media(max-width:650px){.wrap{padding:12px}.big{font-size:1.5rem}.controls{grid-template-columns:1fr 1fr}.controls .wide{grid-column:1/-1}.periods{grid-template-columns:1fr}}
 </style>
@@ -133,6 +151,43 @@ footer{color:var(--muted);font-size:.78rem;padding:20px 2px 35px;line-height:1.4
 </div>
 </section>
 
+
+<section class="card full">
+<h2>Property map</h2>
+<div class="big">My Hunt Map</div>
+<div class="small">Your pins and observations stay in this browser—they are not published to GitHub. At the property, tap My Location for the most accurate starting point.</div>
+<div class="map-tools">
+<button type="button" id="locateMe">◎ My Location</button>
+<button type="button" class="pin-tool" data-kind="stand">🪑 Stand</button>
+<button type="button" class="pin-tool" data-kind="camera">📷 Camera</button>
+<button type="button" class="pin-tool" data-kind="bait">🌽 Bait</button>
+<button type="button" class="pin-tool" data-kind="sign">🦌 Deer Sign</button>
+<button type="button" id="baseLayer">▧ Satellite</button>
+</div>
+<div class="map-status" id="mapStatus">Choose a pin type, then tap its location on the map.</div>
+<div id="propertyMap" aria-label="Interactive hunting property map"></div>
+<div class="map-legend"><span>🪑 Stand/blind</span><span>📷 Trail camera</span><span>🌽 Bait site</span><span>🦌 Trail, rub, scrape or crossing</span></div>
+<div class="map-tools">
+<button type="button" id="exportData">Export backup</button>
+<button type="button" id="importData">Import backup</button>
+<input type="file" id="importFile" accept=".json,application/json" hidden>
+<button type="button" id="clearPins" class="danger-btn">Clear all pins</button>
+</div>
+</section>
+
+<section class="card full">
+<h2>Observation & hunt log</h2>
+<div class="log-form">
+<div><label for="logDate">Date and time</label><input id="logDate" type="datetime-local"></div>
+<div><label for="logType">Type</label><select id="logType"><option>Deer sighting</option><option>Camera photo</option><option>Rub or scrape</option><option>Tracks</option><option>Hunt</option><option>Harvest</option></select></div>
+<div><label for="logDirection">Travel direction</label><select id="logDirection"><option>Unknown</option><option>N</option><option>NE</option><option>E</option><option>SE</option><option>S</option><option>SW</option><option>W</option><option>NW</option></select></div>
+<div><label for="logCount">Deer count</label><input id="logCount" type="number" min="0" value="1"></div>
+<textarea id="logNotes" placeholder="Example: Two does crossed the gully toward the pond just before sunset."></textarea>
+<button type="button" id="saveLog">Save observation</button>
+</div>
+<div id="logList" class="log-list"></div>
+</section>
+
 <section class="card full">
 <h2>Weather near selected ZIP code</h2>
 <div class="grid">
@@ -152,6 +207,10 @@ ZIP-code locations are provided by Zippopotam.us. Weather comes from Open-Meteo.
 
 <script>
 const $ = id => document.getElementById(id);
+const huntStore={
+ get(key,fallback){try{const v=localStorage.getItem('hunt-'+key);return v===null?fallback:JSON.parse(v)}catch{return fallback}},
+ set(key,value){localStorage.setItem('hunt-'+key,JSON.stringify(value))}
+};
 function localDate(value){const [y,m,d]=value.split('-').map(Number);return new Date(y,m-1,d,12,0,0)}
 function fmt(d){if(!d||isNaN(d))return'—';return d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}
 function addMinutes(d,m){return new Date(d.getTime()+m*60000)}
@@ -250,6 +309,78 @@ async function update(){
   }
 }
 $('update').addEventListener('click',update);$('date').addEventListener('change',update);$('zip').addEventListener('change',update);$('arrival').addEventListener('change',update);
+
+const map=L.map('propertyMap').setView(huntStore.get('center',[35.377,-84.768]),huntStore.get('zoom',16));
+const topo=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+const satellite=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
+satellite.addTo(map);
+let showingSatellite=true,activeKind=null,pins=huntStore.get('pins',[]);
+const pinIcons={
+ stand:L.divIcon({className:'',html:'<div class="map-icon stand">🪑</div>',iconSize:[30,30],iconAnchor:[15,15]}),
+ camera:L.divIcon({className:'',html:'<div class="map-icon camera">📷</div>',iconSize:[30,30],iconAnchor:[15,15]}),
+ bait:L.divIcon({className:'',html:'<div class="map-icon bait">🌽</div>',iconSize:[30,30],iconAnchor:[15,15]}),
+ sign:L.divIcon({className:'',html:'<div class="map-icon sign">🦌</div>',iconSize:[30,30],iconAnchor:[15,15]})
+};
+function savePins(){huntStore.set('pins',pins)}
+function safe(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function pinPopup(p){return '<strong>'+safe(p.label)+'</strong><br><button onclick="renamePin(\''+p.id+'\')">Rename</button><button class="danger-btn" onclick="removePin(\''+p.id+'\')">Delete</button>'}
+function renderPins(){
+ map.eachLayer(l=>{if(l.options?.huntPin)map.removeLayer(l)});
+ pins.forEach(p=>L.marker([p.lat,p.lng],{icon:pinIcons[p.kind],draggable:true,huntPin:true}).addTo(map).bindPopup(pinPopup(p)).on('dragend',e=>{const q=e.target.getLatLng();p.lat=q.lat;p.lng=q.lng;savePins()}));
+}
+window.renamePin=id=>{const p=pins.find(x=>x.id===id),n=p&&prompt('Name this location:',p.label);if(n?.trim()){p.label=n.trim();savePins();renderPins()}};
+window.removePin=id=>{pins=pins.filter(x=>x.id!==id);savePins();renderPins()};
+renderPins();
+map.on('moveend',()=>{huntStore.set('center',[map.getCenter().lat,map.getCenter().lng]);huntStore.set('zoom',map.getZoom())});
+map.on('click',e=>{
+ if(!activeKind)return;
+ const base={stand:'Stand / Blind',camera:'Trail Camera',bait:'Bait Site',sign:'Deer Sign'}[activeKind];
+ const label=prompt('Name this pin:',base+' '+(pins.filter(p=>p.kind===activeKind).length+1));
+ if(label===null)return;
+ pins.push({id:Date.now().toString(36),kind:activeKind,label:label.trim()||base,lat:e.latlng.lat,lng:e.latlng.lng});
+ savePins();renderPins();activeKind=null;document.querySelectorAll('.pin-tool').forEach(b=>b.classList.remove('active'));$('mapStatus').textContent='Pin saved. Drag it to fine-tune its location.';
+});
+document.querySelectorAll('.pin-tool').forEach(btn=>btn.onclick=()=>{
+ activeKind=btn.dataset.kind;document.querySelectorAll('.pin-tool').forEach(b=>b.classList.toggle('active',b===btn));$('mapStatus').textContent='Tap the map to place '+btn.textContent.trim()+'.';
+});
+$('locateMe').onclick=()=>{
+ if(!navigator.geolocation){$('mapStatus').textContent='Location is unavailable in this browser.';return}
+ $('mapStatus').textContent='Finding your location…';
+ navigator.geolocation.getCurrentPosition(pos=>{
+  const ll=[pos.coords.latitude,pos.coords.longitude];map.setView(ll,18);
+  L.circle(ll,{radius:pos.coords.accuracy,color:'#7aa8c7',fillOpacity:.12}).addTo(map);
+  $('mapStatus').textContent='Centered on you. Accuracy: about '+Math.round(pos.coords.accuracy*3.281)+' ft.';
+ },()=>{$('mapStatus').textContent='Location permission was denied. Enable it in your browser settings.'},{enableHighAccuracy:true,timeout:12000});
+};
+$('baseLayer').onclick=()=>{
+ showingSatellite=!showingSatellite;
+ if(showingSatellite){map.removeLayer(topo);satellite.addTo(map);$('baseLayer').textContent='▤ Topographic'}else{map.removeLayer(satellite);topo.addTo(map);$('baseLayer').textContent='▧ Satellite'}
+};
+$('clearPins').onclick=()=>{if(confirm('Delete every saved map pin on this device?')){pins=[];savePins();renderPins()}};
+function renderLogs(){
+ const logs=huntStore.get('logs',[]),box=$('logList');box.innerHTML='';
+ if(!logs.length){box.innerHTML='<div class="small">No observations saved yet.</div>';return}
+ logs.slice().reverse().forEach(log=>{
+  const d=document.createElement('div');d.className='log-entry';
+  d.innerHTML='<div><strong>'+safe(log.type)+'</strong> · '+new Date(log.date).toLocaleString()+'<div class="small">'+log.count+' deer · '+safe(log.direction)+(log.notes?' · '+safe(log.notes):'')+'</div></div><button type="button" class="danger-btn" style="width:auto" data-log="'+log.id+'">×</button>';
+  box.appendChild(d)
+ });
+ box.querySelectorAll('[data-log]').forEach(b=>b.onclick=()=>{huntStore.set('logs',huntStore.get('logs',[]).filter(x=>x.id!==b.dataset.log));renderLogs()});
+}
+$('saveLog').onclick=()=>{
+ if(!$('logDate').value){alert('Choose a date and time.');return}
+ const logs=huntStore.get('logs',[]);
+ logs.push({id:Date.now().toString(36),date:$('logDate').value,type:$('logType').value,direction:$('logDirection').value,count:+$('logCount').value||0,notes:$('logNotes').value.trim()});
+ huntStore.set('logs',logs);$('logNotes').value='';renderLogs();
+};
+const logNow=new Date();$('logDate').value=new Date(logNow-logNow.getTimezoneOffset()*60000).toISOString().slice(0,16);renderLogs();
+$('exportData').onclick=()=>{
+ const data={pins:huntStore.get('pins',[]),logs:huntStore.get('logs',[]),center:huntStore.get('center',null),zoom:huntStore.get('zoom',null)};
+ const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='deer-hunt-data.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500);
+};
+$('importData').onclick=()=>$('importFile').click();
+$('importFile').onchange=async e=>{try{const d=JSON.parse(await e.target.files[0].text());if(Array.isArray(d.pins))huntStore.set('pins',d.pins);if(Array.isArray(d.logs))huntStore.set('logs',d.logs);if(d.center)huntStore.set('center',d.center);if(d.zoom)huntStore.set('zoom',d.zoom);location.reload()}catch{alert('That backup file could not be read.')}};
+
 const today=new Date();$('date').value=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;update();
 </script>
 </body>
