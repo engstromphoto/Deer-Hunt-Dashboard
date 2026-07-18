@@ -397,12 +397,31 @@ function renderLogs(){
  });
  box.querySelectorAll('[data-log]').forEach(b=>b.onclick=()=>{huntStore.set('logs',huntStore.get('logs',[]).filter(x=>x.id!==b.dataset.log));renderLogs()});
 }
-$('saveLog').onclick=()=>{
- if(!$('logDate').value){alert('Choose a date and time.');return}
- const logs=huntStore.get('logs',[]);
- const record={id:Date.now().toString(36),date:$('logDate').value,type:$('logType').value,direction:$('logDirection').value,count:+$('logCount').value||0,notes:$('logNotes').value.trim()};
- logs.push(record);huntStore.set('logs',logs);syncPost({action:'observation',record:{...record,location:'',weather:latestWind?latestWind.speed+' mph from '+latestWind.from:'',period:new Date(record.date).getHours()<11?'Morning':new Date(record.date).getHours()<15?'Midday':'Evening'}});$('logNotes').value='';renderLogs();
-};
+const saveLogButton=$('saveLog');
+saveLogButton.addEventListener('click',async()=>{
+ const originalText=saveLogButton.textContent;
+ try{
+  const date=$('logDate').value;
+  if(!date){alert('Choose a date and time.');$('logDate').focus();return}
+  saveLogButton.disabled=true;saveLogButton.textContent='Saving…';
+  const record={id:Date.now().toString(36),date,type:$('logType').value,direction:$('logDirection').value,count:Number($('logCount').value)||0,notes:$('logNotes').value.trim()};
+  const logs=huntStore.get('logs',[]);
+  logs.push(record);
+  huntStore.set('logs',logs);
+  $('logNotes').value='';
+  renderLogs();
+  const hour=new Date(record.date).getHours();
+  const synced=await syncPost({action:'observation',record:{...record,location:'',weather:latestWind?latestWind.speed+' mph from '+latestWind.from:'',period:hour<11?'Morning':hour<15?'Midday':'Evening'}});
+  saveLogButton.textContent=synced?'Saved & synced ✓':'Saved on device ✓';
+  setTimeout(()=>{saveLogButton.textContent=originalText},1800);
+ }catch(error){
+  console.error('Observation save failed',error);
+  saveLogButton.textContent='Save failed — try again';
+  alert('The observation could not be saved. Refresh the page and try again.');
+ }finally{
+  saveLogButton.disabled=false;
+ }
+});
 $('syncUrl').value=huntStore.get('syncUrl','');$('syncSecret').value=huntStore.get('syncSecret','');
 if($('syncUrl').value&&$('syncSecret').value)$('syncStatus').textContent='Sync configured. New observations and pin changes will be sent automatically.';
 $('saveSync').onclick=()=>{huntStore.set('syncUrl',$('syncUrl').value.trim());huntStore.set('syncSecret',$('syncSecret').value.trim());$('syncStatus').textContent='Sync settings saved on this device.'};
