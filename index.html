@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#111711">
-<title>McMinn County Deer Hunt Dashboard</title>
+<title>dEngstrom Deer Hunt</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -22,7 +22,7 @@ header{padding:18px 0 10px}
 h1{font-size:clamp(1.7rem,5vw,2.6rem);margin:0 0 6px}
 .subtitle{color:var(--muted);margin:0}
 .controls,.grid{display:grid;gap:12px}
-.controls{grid-template-columns:repeat(auto-fit,minmax(190px,1fr));background:var(--panel);
+.controls{grid-template-columns:minmax(150px,1fr) 120px minmax(150px,1fr) minmax(150px,1fr);background:var(--panel);
 border:1px solid var(--line);padding:14px;border-radius:16px;margin:16px 0}
 label{display:block;color:var(--muted);font-size:.82rem;margin-bottom:5px}
 input,button{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);
@@ -52,7 +52,16 @@ button{background:var(--accent);color:#1c160b;border:0;font-weight:800;cursor:po
 .notice{padding:12px;border-radius:10px;background:#2d2b1b;color:#eadcae;margin-top:12px}
 .error{background:#3b211f;color:#f3c0b8}
 .periods{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
-.period{background:#111811;border:1px solid var(--line);border-radius:12px;padding:12px}
+.period{background:#111811;border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;position:relative}
+.period:hover,.period:focus{border-color:var(--accent);outline:none}.period:after{content:'Tap for details';display:block;color:var(--accent);font-size:.7rem;margin-top:7px}
+.best-period{margin:12px 0 2px;padding:12px 14px;border:1px solid #8d6c2f;background:#181d12;border-radius:12px}.best-period strong{color:var(--accent)}
+.solunar-help{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}.solunar-help>div{background:#111811;border:1px solid var(--line);border-radius:12px;padding:12px}
+.modal{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;padding:18px;z-index:9999}.modal.open{display:flex}
+.modal-card{width:min(620px,100%);max-height:85vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px}
+.modal-head{display:flex;justify-content:space-between;gap:12px}.modal-head h2{margin:0;color:var(--text);font-size:1.35rem;text-transform:none;letter-spacing:0}.modal-close{width:42px;background:var(--panel2);color:var(--text)}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}.detail-box{background:#111811;border:1px solid var(--line);border-radius:10px;padding:10px}
+.sheet-link{display:inline-flex;justify-content:center;align-items:center;text-decoration:none;width:100%;padding:11px;border-radius:10px;background:#75a96a;color:#101710;font-weight:800}
+@media(max-width:750px){.controls{grid-template-columns:1fr 105px}.controls .wide{grid-column:1/-1}.solunar-help,.detail-grid{grid-template-columns:1fr}}
 .period h3{margin:0 0 5px;font-size:.85rem;color:var(--muted);text-transform:uppercase}
 .period strong{font-size:1rem}
 .score{display:inline-block;padding:3px 8px;border-radius:999px;background:#34482f;margin-left:6px;font-size:.72rem}
@@ -79,13 +88,13 @@ footer{color:var(--muted);font-size:.78rem;padding:20px 2px 35px;line-height:1.4
 <body>
 <div class="wrap">
 <header>
-<h1>McMinn County Deer Hunt Dashboard</h1>
+<h1>dEngstrom Deer Hunt</h1>
 <p class="subtitle">Sun, moon, weather, legal light and estimated deer-movement windows.</p>
 </header>
 
 <section class="controls">
 <div><label for="date">Hunt date</label><input id="date" type="date"></div>
-<div><label for="zip">Hunting ZIP code</label><input id="zip" type="text" inputmode="numeric" maxlength="5" value="37303"></div>
+<div class="zip-control"><label for="zip">Hunt ZIP</label><input id="zip" type="text" inputmode="numeric" maxlength="5" value="37370"></div>
 <div><label for="arrival">Arrive before legal light</label><input id="arrival" type="number" min="15" max="180" value="60"></div>
 <div class="wide"><label>&nbsp;</label><button id="update">Update dashboard</button></div>
 </section>
@@ -94,11 +103,11 @@ footer{color:var(--muted);font-size:.78rem;padding:20px 2px 35px;line-height:1.4
 <section class="card summary-card full">
 <h2>Quick hunt summary</h2>
 <div class="big" id="quickHeadline">Choose a date and ZIP code.</div>
-<div class="medium" id="quickSummary" style="margin-top:10px"></div>
+<div class="medium" id="quickSummary" style="margin-top:10px"></div><div class="best-period" id="bestHuntPeriod"><strong>Best hunt:</strong> Calculating…</div>
 <div class="periods">
-  <div class="period"><h3>Morning</h3><strong id="morningSummary">—</strong></div>
-  <div class="period"><h3>Midday</h3><strong id="middaySummary">—</strong></div>
-  <div class="period"><h3>Evening</h3><strong id="eveningSummary">—</strong></div>
+  <div class="period" data-period="morning" tabindex="0"><h3>Morning</h3><strong id="morningSummary">—</strong></div>
+  <div class="period" data-period="midday" tabindex="0"><h3>Midday</h3><strong id="middaySummary">—</strong></div>
+  <div class="period" data-period="evening" tabindex="0"><h3>Evening</h3><strong id="eveningSummary">—</strong></div>
 </div>
 </section>
 
@@ -106,12 +115,6 @@ footer{color:var(--muted);font-size:.78rem;padding:20px 2px 35px;line-height:1.4
 <h2>Recommended arrival</h2>
 <div class="big" id="arrivalTime">—</div>
 <div class="small" id="arrivalNote">Based on your selected setup buffer.</div>
-</section>
-
-<section class="card">
-<h2>Location</h2>
-<div class="big" id="placeName">—</div>
-<div class="small" id="placeDetail">Enter a U.S. ZIP code.</div>
 </section>
 
 <section class="card">
@@ -147,8 +150,7 @@ footer{color:var(--muted);font-size:.78rem;padding:20px 2px 35px;line-height:1.4
 <div class="legend">
 <span><i class="dot" style="background:var(--accent)"></i>Major, about 2 hours</span>
 <span><i class="dot" style="background:var(--green)"></i>Minor, about 1 hour</span>
-<span>White marks: sunrise and sunset</span>
-</div>
+<span>White marks: sunrise and sunset</span></div><div class="solunar-help"><div><strong>Major period</strong><div class="small">A roughly two-hour window centered on the moon being overhead or underfoot. It is the stronger solunar influence, especially when it overlaps dawn, dusk or a weather change.</div></div><div><strong>Minor period</strong><div class="small">A roughly one-hour window around moonrise or moonset. It is a smaller possible movement boost. Neither period overrides wind, food, bedding, pressure or hunting pressure.</div></div></div>
 </section>
 
 
@@ -168,7 +170,7 @@ footer{color:var(--muted);font-size:.78rem;padding:20px 2px 35px;line-height:1.4
 <div id="propertyMap" aria-label="Interactive hunting property map"></div>
 <div class="map-legend"><span>🪑 Stand/blind</span><span>📷 Trail camera</span><span>🌽 Bait site</span><span>🦌 Trail, rub, scrape or crossing</span></div>
 <div class="map-tools">
-<button type="button" id="exportData">Export backup</button>
+<a class="sheet-link" href="https://docs.google.com/spreadsheets/d/1jJFwmOtHX0LQS6_lAT48slWUyO77khl_FNCnORbXo3E/edit" target="_blank" rel="noopener">Open Google Hunt Sheet</a><button type="button" id="exportData">Export backup</button>
 <button type="button" id="importData">Import backup</button>
 <input type="file" id="importFile" accept=".json,application/json" hidden>
 <button type="button" id="clearPins" class="danger-btn">Clear all pins</button>
@@ -203,8 +205,7 @@ footer{color:var(--muted);font-size:.78rem;padding:20px 2px 35px;line-height:1.4
 <footer>
 ZIP-code locations are provided by Zippopotam.us. Weather comes from Open-Meteo. Astronomy is calculated with SunCalc. Solunar windows are approximate planning aids, not guarantees of deer movement. Wind direction, access route, pressure, food, temperature changes and trail-camera observations should carry more weight. Tennessee general big-game hours are generally 30 minutes before legal sunrise through 30 minutes after legal sunset; always check current TWRA and WMA-specific rules.
 </footer>
-</div>
-
+</div><div class="modal" id="periodModal"><div class="modal-card"><div class="modal-head"><div><h2 id="periodModalTitle"></h2><div class="small" id="periodModalWindow"></div></div><button class="modal-close" id="periodModalClose">×</button></div><div class="medium" id="periodModalSummary" style="margin-top:14px"></div><div class="detail-grid"><div class="detail-box"><strong>Conditions</strong><div class="small" id="periodModalWeather"></div></div><div class="detail-box"><strong>Solunar influence</strong><div class="small" id="periodModalSolunar"></div></div><div class="detail-box"><strong>How to hunt it</strong><div class="small" id="periodModalStrategy"></div></div><div class="detail-box"><strong>Major vs. minor</strong><div class="small">Major is the stronger two-hour overhead/underfoot window. Minor is the shorter moonrise/moonset window. Both are possible boosts, not guarantees.</div></div></div></div></div>
 <script>
 const $ = id => document.getElementById(id);
 const huntStore={
@@ -263,12 +264,15 @@ function bestWindowText(ext,moon,start,end){
   options.sort((a,b)=>(a.name==='major'?-1:1)-(b.name==='major'?-1:1));
   return `${options[0].name[0].toUpperCase()+options[0].name.slice(1)} peak near ${fmt(options[0].c)}`;
 }
+function solunarDetail(ext,moon,start,end){const hits=[{n:'Major',c:ext.overhead,r:60},{n:'Major',c:ext.underfoot,r:60},{n:'Minor',c:moon.rise,r:30},{n:'Minor',c:moon.set,r:30}].filter(x=>overlapWindow(x.c,start,end,x.r));return hits.length?hits.map(x=>x.n+' near '+fmt(x.c)).join('. ')+'.':'No major or minor peak overlaps this stretch.'}
+function showPeriod(n){const d=periodDetails[n];if(!d)return;$('periodModalTitle').textContent=d.title;$('periodModalWindow').textContent=d.window;$('periodModalSummary').textContent=d.summary;$('periodModalWeather').textContent=d.weather;$('periodModalSolunar').textContent=d.solunar;$('periodModalStrategy').textContent=d.strategy;$('periodModal').classList.add('open')}
+document.querySelectorAll('[data-period]').forEach(x=>{x.onclick=()=>showPeriod(x.dataset.period);x.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();showPeriod(x.dataset.period)}}});$('periodModalClose').onclick=()=>$('periodModal').classList.remove('open');$('periodModal').onclick=e=>{if(e.target===$('periodModal'))$('periodModal').classList.remove('open')};
 async function update(){
   const dateStr=$('date').value,zip=$('zip').value.trim(),buffer=parseInt($('arrival').value)||60;
   if(!/^\d{5}$/.test(zip)){alert('Enter a valid 5-digit ZIP code.');return}
   $('quickHeadline').textContent='Loading hunt conditions…';$('quickSummary').textContent='';
   try{
-    const loc=await geocodeZip(zip);$('placeName').textContent=`${loc.city}, ${loc.state}`;$('placeDetail').textContent=`ZIP ${zip}`;
+    const loc=await geocodeZip(zip);
     const date=localDate(dateStr),sun=SunCalc.getTimes(date,loc.lat,loc.lon),moon=SunCalc.getMoonTimes(date,loc.lat,loc.lon,true),illum=SunCalc.getMoonIllumination(date),ext=moonExtremes(date,loc.lat,loc.lon);
     const legalStart=addMinutes(sun.sunrise,-30),legalEnd=addMinutes(sun.sunset,30),arrival=addMinutes(legalStart,-buffer);
     $('arrivalTime').textContent=fmt(arrival);$('arrivalNote').textContent=`Leaves ${buffer} minutes to walk in, settle down and let the woods quiet before legal light.`;
@@ -283,6 +287,16 @@ async function update(){
     const w=await loadWeather(dateStr,loc.lat,loc.lon,sun.sunrise,sun.sunset);
     const morningEnd=new Date(date.getFullYear(),date.getMonth(),date.getDate(),10,30),midStart=new Date(date.getFullYear(),date.getMonth(),date.getDate(),10,30),midEnd=new Date(date.getFullYear(),date.getMonth(),date.getDate(),14,30),eveStart=new Date(date.getFullYear(),date.getMonth(),date.getDate(),14,30);
     const mPeak=bestWindowText(ext,moon,legalStart,morningEnd),nPeak=bestWindowText(ext,moon,midStart,midEnd),ePeak=bestWindowText(ext,moon,eveStart,legalEnd);
+    const ms=solunarDetail(ext,moon,legalStart,morningEnd),ns=solunarDetail(ext,moon,midStart,midEnd),es=solunarDetail(ext,moon,eveStart,legalEnd);
+    const mScore=3+(ms.startsWith('No')?0:ms.includes('Major')?4:2)+(w&&w.sunrise.wind>=3&&w.sunrise.wind<=12?2:0);
+    const eScore=3+(es.startsWith('No')?0:es.includes('Major')?4:2)+(w&&w.evening.wind>=3&&w.evening.wind<=12?2:0);
+    const best=eScore>mScore?'Evening':'Morning',bestWindow=best==='Morning'?fmt(legalStart)+'–'+fmt(addMinutes(sun.sunrise,150)):fmt(addMinutes(sun.sunset,-150))+'–'+fmt(legalEnd);
+    $('bestHuntPeriod').innerHTML='<strong>Best hunt: '+best+'</strong> · '+bestWindow+'<div class="small">'+(best==='Morning'?ms:es)+'</div>';
+    periodDetails={
+     morning:{title:'Morning hunt details',window:fmt(legalStart)+'–10:30 AM',summary:mPeak+'. Focus on the first-light feeding-to-bedding transition.',weather:w?Math.round(w.sunrise.temp)+'°, '+w.sunrise.wind.toFixed(0)+' mph '+w.sunrise.dir+', '+w.sunrise.rain+'% rain.':'Weather unavailable.',solunar:ms,strategy:'Enter before legal light, avoid crossing the known pond/ridge travel lines, and keep scent off the bedding-side exit.'},
+     midday:{title:'Midday hunt details',window:'10:30 AM–2:30 PM',summary:nPeak+'. Usually lower priority unless the rut, a front or a major period produces movement.',weather:w?Math.round(w.noon.temp)+'°, '+w.noon.wind.toFixed(0)+' mph '+w.noon.dir+'.':'Weather unavailable.',solunar:ns,strategy:'Best for an all-day rut sit or a strong weather/solunar overlap. Otherwise use this time without disturbing the property.'},
+     evening:{title:'Evening hunt details',window:'2:30 PM–'+fmt(legalEnd),summary:ePeak+'. Movement should build in the last two to three hours as deer leave cover for water or food.',weather:w?Math.round(w.evening.temp)+'°, '+w.evening.wind.toFixed(0)+' mph '+w.evening.dir+', '+w.evening.rain+'% rain.':'Weather unavailable.',solunar:es,strategy:'Set up early, protect the bedding route, and plan an exit that does not blow deer off the pond or food after dark.'}
+    };
     if(w){
       $('morningSummary').textContent=`${mPeak}. ${Math.round(w.sunrise.temp)}°, ${w.sunrise.wind.toFixed(0)} mph ${w.sunrise.dir}, ${w.sunrise.rain}% rain.`;
       $('middaySummary').textContent=`${nPeak}. Near ${Math.round(w.noon.temp)}°, ${w.noon.wind.toFixed(0)} mph ${w.noon.dir}.`;
@@ -305,7 +319,6 @@ async function update(){
     }
   }catch(e){
     $('quickHeadline').textContent='Could not load that ZIP code.';$('quickSummary').textContent='Check the ZIP code and your internet connection.';
-    $('placeName').textContent='Not found';$('placeDetail').textContent='Enter a valid U.S. ZIP code.';
   }
 }
 $('update').addEventListener('click',update);$('date').addEventListener('change',update);$('zip').addEventListener('change',update);$('arrival').addEventListener('change',update);
