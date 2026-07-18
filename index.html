@@ -167,11 +167,12 @@ footer{color:var(--muted);font-size:.78rem;padding:20px 2px 35px;line-height:1.4
 <button type="button" class="pin-tool" data-kind="sign">🦌 Deer Sign</button>
 <button type="button" id="drawBoundary">━ Property Line</button>
 <button type="button" id="drawPath">〰 Deer Path</button>
+<button type="button" id="drawFeature">≈ Landscape Feature</button>
 <button type="button" id="baseLayer">▧ Satellite</button>
 </div>
 <div class="map-status" id="mapStatus">Choose a pin type, then tap its location on the map.</div>
 <div id="propertyMap" aria-label="Interactive hunting property map"></div>
-<div class="map-legend"><span>🪑 Stand/blind</span><span>📷 Trail camera</span><span>🌽 Bait site</span><span>🦌 Sign/crossing</span><span style="color:#ff5252">━ Property lines</span><span style="color:#ff68b3">┅ Deer path</span></div>
+<div class="map-legend"><span>🪑 Stand/blind</span><span>📷 Trail camera</span><span>🌽 Bait site</span><span>🦌 Sign/crossing</span><span style="color:#ff5252">━ Property lines</span><span style="color:#ff68b3">┅ Deer path</span><span style="color:#4da3ff">━ Landscape feature</span></div>
 <div class="map-tools">
 <a class="sheet-link" href="https://docs.google.com/spreadsheets/d/1jJFwmOtHX0LQS6_lAT48slWUyO77khl_FNCnORbXo3E/edit" target="_blank" rel="noopener">Open Google Hunt Sheet</a><button type="button" id="exportData">Export backup</button>
 <button type="button" id="importData">Import backup</button>
@@ -341,10 +342,10 @@ const topo=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{max
 const satellite=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
 satellite.addTo(map);
 let showingSatellite=true,activeKind=null,pins=huntStore.get('pins',[]);
-let propertyLines=huntStore.get('propertyLines',[]),deerPaths=huntStore.get('deerPaths',[]);
+let propertyLines=huntStore.get('propertyLines',[]),deerPaths=huntStore.get('deerPaths',[]),featureLines=huntStore.get('featureLines',[]);
 const legacyBoundary=huntStore.get('boundary',[]);
 if(!propertyLines.length&&legacyBoundary.length){propertyLines=[{id:'legacy-boundary',label:'Property Line 1',points:legacyBoundary}];huntStore.set('propertyLines',propertyLines)}
-let drawMode=null,drawPoints=[],drawPreview=null,boundaryLayers=[],pathLayers=[];
+let drawMode=null,drawPoints=[],drawPreview=null,boundaryLayers=[],pathLayers=[],featureLayers=[];
 const pinIcons={
  stand:L.divIcon({className:'',html:'<div class="map-icon stand">🪑</div>',iconSize:[30,30],iconAnchor:[15,15]}),
  camera:L.divIcon({className:'',html:'<div class="map-icon camera">📷</div>',iconSize:[30,30],iconAnchor:[15,15]}),
@@ -371,6 +372,7 @@ renderPins();
 function renderMapLines(){
  boundaryLayers.forEach(x=>map.removeLayer(x));boundaryLayers=[];
  pathLayers.forEach(x=>map.removeLayer(x));pathLayers=[];
+ featureLayers.forEach(x=>map.removeLayer(x));featureLayers=[];
  propertyLines.forEach(line=>{
   const layer=L.polyline(line.points,{color:'#ff5252',weight:4,interactive:false}).addTo(map);
   boundaryLayers.push(layer);
@@ -379,20 +381,25 @@ function renderMapLines(){
   const layer=L.polyline(path.points,{color:'#ff68b3',weight:4,dashArray:'9 7'}).addTo(map).bindPopup('<strong>'+safe(path.label)+'</strong><br><button class="danger-btn" onclick="deleteDeerPath(\''+path.id+'\')">Delete path</button>');
   pathLayers.push(layer);
  });
+ featureLines.forEach(feature=>{
+  const layer=L.polyline(feature.points,{color:'#4da3ff',weight:4}).addTo(map).bindPopup('<strong>'+safe(feature.label)+'</strong><br><button class="danger-btn" onclick="deleteFeatureLine(\''+feature.id+'\')">Delete feature</button>');
+  featureLayers.push(layer);
+ });
 }
 window.deleteBoundary=()=>{if(confirm('Delete all saved property lines?')){propertyLines=[];huntStore.set('propertyLines',propertyLines);renderMapLines()}};
 window.deleteDeerPath=id=>{if(confirm('Delete this deer path?')){deerPaths=deerPaths.filter(x=>x.id!==id);huntStore.set('deerPaths',deerPaths);renderMapLines()}};
+window.deleteFeatureLine=id=>{if(confirm('Delete this landscape feature?')){featureLines=featureLines.filter(x=>x.id!==id);huntStore.set('featureLines',featureLines);renderMapLines()}};
 function updateDrawPreview(){
  if(drawPreview){map.removeLayer(drawPreview);drawPreview=null}
  if(!drawPoints.length)return;
  drawPreview=drawMode==='boundary'
   ?L.polyline(drawPoints,{color:'#ffd166',weight:4,dashArray:'6 5',interactive:false}).addTo(map)
-  :L.polyline(drawPoints,{color:'#ffd166',weight:4,dashArray:'6 5',interactive:false}).addTo(map);
+  :L.polyline(drawPoints,{color:drawMode==='feature'?'#4da3ff':'#ffd166',weight:4,dashArray:'6 5',interactive:false}).addTo(map);
 }
 function resetDraw(){
  if(drawPreview){map.removeLayer(drawPreview);drawPreview=null}
  drawMode=null;drawPoints=[];
- $('drawBoundary').classList.remove('active');$('drawPath').classList.remove('active');
+ $('drawBoundary').classList.remove('active');$('drawPath').classList.remove('active');$('drawFeature').classList.remove('active');
  $('drawBoundary').textContent='⬡ Property Boundary';$('drawPath').textContent='〰 Deer Path';
 }
 function finishDraw(){
@@ -407,6 +414,12 @@ function finishDraw(){
   if(label===null)return;
   deerPaths.push({id:Date.now().toString(36),label:label.trim()||'Deer Path',points:drawPoints.slice()});
   huntStore.set('deerPaths',deerPaths);$('mapStatus').textContent='Deer path saved. Tap the pink dashed line later to delete it.';
+ }else if(drawMode==='feature'){
+  if(drawPoints.length<2){$('mapStatus').textContent='Add at least 2 points before finishing the landscape feature.';return}
+  const label=prompt('Name this landscape feature:','Creek / Gully '+(featureLines.length+1));
+  if(label===null)return;
+  featureLines.push({id:Date.now().toString(36),label:label.trim()||'Landscape Feature',points:drawPoints.slice()});
+  huntStore.set('featureLines',featureLines);$('mapStatus').textContent='Landscape feature saved in blue.';
  }
  resetDraw();renderMapLines();
 }
@@ -415,12 +428,13 @@ function toggleDraw(mode){
  if(drawMode&&drawPoints.length&&!confirm('Discard the unfinished line and start another?'))return;
  resetDraw();activeKind=null;document.querySelectorAll('.pin-tool').forEach(b=>b.classList.remove('active'));
  drawMode=mode;drawPoints=[];
- const btn=mode==='boundary'?$('drawBoundary'):$('drawPath');btn.classList.add('active');
- btn.textContent=mode==='boundary'?'✓ Finish Property Line':'✓ Finish Deer Path';
- $('mapStatus').textContent=mode==='boundary'?'Tap two or more points along one property edge, then tap Finish Property Line. Repeat for each separate edge.':'Tap points along the deer route, then tap Finish Deer Path.';
+ const btn=mode==='boundary'?$('drawBoundary'):mode==='path'?$('drawPath'):$('drawFeature');btn.classList.add('active');
+ btn.textContent=mode==='boundary'?'✓ Finish Property Line':mode==='path'?'✓ Finish Deer Path':'✓ Finish Landscape Feature';
+ $('mapStatus').textContent=mode==='boundary'?'Tap two or more points along one property edge, then tap Finish Property Line. Repeat for each separate edge.':mode==='path'?'Tap points along the deer route, then tap Finish Deer Path.':'Tap points along the creek, gully, fence or field edge, then tap Finish Landscape Feature.';
 }
 $('drawBoundary').onclick=()=>toggleDraw('boundary');
 $('drawPath').onclick=()=>toggleDraw('path');
+$('drawFeature').onclick=()=>toggleDraw('feature');
 renderMapLines();
 
 map.on('moveend',()=>{huntStore.set('center',[map.getCenter().lat,map.getCenter().lng]);huntStore.set('zoom',map.getZoom())});
@@ -492,11 +506,11 @@ $('saveSync').onclick=()=>{huntStore.set('syncUrl',$('syncUrl').value.trim());hu
 $('testSync').onclick=async()=>{huntStore.set('syncUrl',$('syncUrl').value.trim());huntStore.set('syncSecret',$('syncSecret').value.trim());$('syncStatus').textContent='Sending test…';const ok=await syncPost({action:'observation',record:{date:new Date().toISOString(),type:'Sync test',count:0,direction:'Unknown',location:'Dashboard',notes:'Automatic sync connected successfully.',weather:'',period:''}});if(ok)$('syncStatus').textContent='Test sent. Check the Observations tab for a Sync test row.'};
 const logNow=new Date();$('logDate').value=new Date(logNow-logNow.getTimezoneOffset()*60000).toISOString().slice(0,16);renderLogs();
 $('exportData').onclick=()=>{
- const data={pins:huntStore.get('pins',[]),propertyLines:huntStore.get('propertyLines',[]),deerPaths:huntStore.get('deerPaths',[]),logs:huntStore.get('logs',[]),center:huntStore.get('center',null),zoom:huntStore.get('zoom',null)};
+ const data={pins:huntStore.get('pins',[]),propertyLines:huntStore.get('propertyLines',[]),deerPaths:huntStore.get('deerPaths',[]),featureLines:huntStore.get('featureLines',[]),logs:huntStore.get('logs',[]),center:huntStore.get('center',null),zoom:huntStore.get('zoom',null)};
  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='deer-hunt-data.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500);
 };
 $('importData').onclick=()=>$('importFile').click();
-$('importFile').onchange=async e=>{try{const d=JSON.parse(await e.target.files[0].text());if(Array.isArray(d.pins))huntStore.set('pins',d.pins);if(Array.isArray(d.propertyLines))huntStore.set('propertyLines',d.propertyLines);if(Array.isArray(d.deerPaths))huntStore.set('deerPaths',d.deerPaths);if(Array.isArray(d.logs))huntStore.set('logs',d.logs);if(d.center)huntStore.set('center',d.center);if(d.zoom)huntStore.set('zoom',d.zoom);location.reload()}catch{alert('That backup file could not be read.')}};
+$('importFile').onchange=async e=>{try{const d=JSON.parse(await e.target.files[0].text());if(Array.isArray(d.pins))huntStore.set('pins',d.pins);if(Array.isArray(d.propertyLines))huntStore.set('propertyLines',d.propertyLines);if(Array.isArray(d.deerPaths))huntStore.set('deerPaths',d.deerPaths);if(Array.isArray(d.featureLines))huntStore.set('featureLines',d.featureLines);if(Array.isArray(d.logs))huntStore.set('logs',d.logs);if(d.center)huntStore.set('center',d.center);if(d.zoom)huntStore.set('zoom',d.zoom);location.reload()}catch{alert('That backup file could not be read.')}};
 
 const today=new Date();$('date').value=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;update();
 </script>
