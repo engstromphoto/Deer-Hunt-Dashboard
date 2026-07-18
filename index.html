@@ -370,7 +370,7 @@ function renderMapLines(){
  if(boundaryLayer){map.removeLayer(boundaryLayer);boundaryLayer=null}
  pathLayers.forEach(x=>map.removeLayer(x));pathLayers=[];
  if(boundary.length>=3){
-  boundaryLayer=L.polygon(boundary,{color:'#ff5252',weight:3,fillColor:'#ff5252',fillOpacity:.06}).addTo(map).bindPopup('<strong>Property Boundary</strong><br><button class="danger-btn" onclick="deleteBoundary()">Delete boundary</button>');
+  boundaryLayer=L.polygon(boundary,{color:'#ff5252',weight:3,fillColor:'#ff5252',fillOpacity:.06,interactive:false}).addTo(map);$('drawBoundary').textContent='↺ Redraw Boundary';
  }
  deerPaths.forEach(path=>{
   const layer=L.polyline(path.points,{color:'#ff68b3',weight:4,dashArray:'9 7'}).addTo(map).bindPopup('<strong>'+safe(path.label)+'</strong><br><button class="danger-btn" onclick="deleteDeerPath(\''+path.id+'\')">Delete path</button>');
@@ -383,8 +383,8 @@ function updateDrawPreview(){
  if(drawPreview){map.removeLayer(drawPreview);drawPreview=null}
  if(!drawPoints.length)return;
  drawPreview=drawMode==='boundary'
-  ?L.polygon(drawPoints,{color:'#ffd166',weight:3,dashArray:'6 5',fillOpacity:.04}).addTo(map)
-  :L.polyline(drawPoints,{color:'#ffd166',weight:4,dashArray:'6 5'}).addTo(map);
+  ?L.polygon(drawPoints,{color:'#ffd166',weight:3,dashArray:'6 5',fillOpacity:.04,interactive:false}).addTo(map)
+  :L.polyline(drawPoints,{color:'#ffd166',weight:4,dashArray:'6 5',interactive:false}).addTo(map);
 }
 function resetDraw(){
  if(drawPreview){map.removeLayer(drawPreview);drawPreview=null}
@@ -396,7 +396,7 @@ function finishDraw(){
  if(drawMode==='boundary'){
   if(drawPoints.length<3){$('mapStatus').textContent='Add at least 3 boundary corners before finishing.';return}
   boundary=drawPoints.slice();huntStore.set('boundary',boundary);
-  $('mapStatus').textContent='Property boundary saved. Tap the red line later to delete or redraw it.';
+  $('mapStatus').textContent='Property boundary saved. It will no longer block taps inside the property. Use Redraw Boundary to replace it.';
  }else if(drawMode==='path'){
   if(drawPoints.length<2){$('mapStatus').textContent='Add at least 2 path points before finishing.';return}
   const label=prompt('Name this deer path:','Deer Path '+(deerPaths.length+1));
@@ -408,6 +408,7 @@ function finishDraw(){
 }
 function toggleDraw(mode){
  if(drawMode===mode){finishDraw();return}
+ if(mode==='boundary'&&boundary.length&&!confirm('Redraw and replace the existing property boundary?'))return
  if(drawMode&&drawPoints.length&&!confirm('Discard the unfinished line and start another?'))return;
  resetDraw();activeKind=null;document.querySelectorAll('.pin-tool').forEach(b=>b.classList.remove('active'));
  drawMode=mode;drawPoints=[];
@@ -430,7 +431,7 @@ map.on('click',e=>{
  savePins();renderPins();activeKind=null;document.querySelectorAll('.pin-tool').forEach(b=>b.classList.remove('active'));$('mapStatus').textContent='Pin saved. Drag it to fine-tune its location.';
 });
 document.querySelectorAll('.pin-tool').forEach(btn=>btn.onclick=()=>{
- if(drawMode)resetDraw();
+ if(drawMode){resetDraw();renderMapLines()}
  activeKind=btn.dataset.kind;document.querySelectorAll('.pin-tool').forEach(b=>b.classList.toggle('active',b===btn));$('mapStatus').textContent='Tap the map to place '+btn.textContent.trim()+'.';
 });
 $('locateMe').onclick=()=>{
