@@ -60,8 +60,9 @@ button{background:var(--accent);color:#1c160b;border:0;font-weight:800;cursor:po
 .modal-card{width:min(620px,100%);max-height:85vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px}
 .modal-head{display:flex;justify-content:space-between;gap:12px}.modal-head h2{margin:0;color:var(--text);font-size:1.35rem;text-transform:none;letter-spacing:0}.modal-close{width:42px;background:var(--panel2);color:var(--text)}
 .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}.detail-box{background:#111811;border:1px solid var(--line);border-radius:10px;padding:10px}
+.sync-card{margin-top:14px;background:#111811;border:1px solid var(--line);border-radius:12px;padding:14px}.sync-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}.sync-status{margin-top:8px;color:var(--muted);font-size:.82rem}
 .sheet-link{display:inline-flex;justify-content:center;align-items:center;text-decoration:none;width:100%;padding:11px;border-radius:10px;background:#75a96a;color:#101710;font-weight:800}
-@media(max-width:750px){.controls{grid-template-columns:1fr 105px}.controls .wide{grid-column:1/-1}.solunar-help,.detail-grid{grid-template-columns:1fr}}
+@media(max-width:750px){.controls{grid-template-columns:1fr 105px}.sync-grid{grid-template-columns:1fr}.controls .wide{grid-column:1/-1}.solunar-help,.detail-grid{grid-template-columns:1fr}}
 .period h3{margin:0 0 5px;font-size:.85rem;color:var(--muted);text-transform:uppercase}
 .period strong{font-size:1rem}
 .score{display:inline-block;padding:3px 8px;border-radius:999px;background:#34482f;margin-left:6px;font-size:.72rem}
@@ -188,6 +189,16 @@ footer{color:var(--muted);font-size:.78rem;padding:20px 2px 35px;line-height:1.4
 <button type="button" id="saveLog">Save observation</button>
 </div>
 <div id="logList" class="log-list"></div>
+<div class="sync-card">
+<strong>Google Sheet Sync</strong>
+<div class="small">One-time setup: deploy the code in the Sheet’s “Apps Script Setup” tab, then paste the Web app URL and secret here.</div>
+<div class="sync-grid">
+<div><label for="syncUrl">Apps Script Web app URL</label><input id="syncUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec"></div>
+<div><label for="syncSecret">Dashboard secret</label><input id="syncSecret" type="password" placeholder="Paste secret from the Sheet"></div>
+</div>
+<div class="map-tools"><button type="button" id="saveSync">Save Sync Settings</button><button type="button" id="testSync">Test Sync</button></div>
+<div id="syncStatus" class="sync-status">Not configured. Browser storage remains active.</div>
+</div>
 </section>
 
 <section class="card full">
@@ -334,7 +345,13 @@ const pinIcons={
  bait:L.divIcon({className:'',html:'<div class="map-icon bait">🌽</div>',iconSize:[30,30],iconAnchor:[15,15]}),
  sign:L.divIcon({className:'',html:'<div class="map-icon sign">🦌</div>',iconSize:[30,30],iconAnchor:[15,15]})
 };
-function savePins(){huntStore.set('pins',pins)}
+function syncConfig(){return{url:huntStore.get('syncUrl',''),secret:huntStore.get('syncSecret','')}}
+async function syncPost(payload){
+ const cfg=syncConfig();if(!cfg.url||!cfg.secret)return false;
+ try{await fetch(cfg.url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({...payload,secret:cfg.secret})});if($('syncStatus'))$('syncStatus').textContent='Sent to Google Sheet at '+new Date().toLocaleTimeString();return true}catch(e){if($('syncStatus'))$('syncStatus').textContent='Sync failed. Browser copy is still safe.';return false}
+}
+function syncPins(){return syncPost({action:'pins_replace',pins})}
+function savePins(){huntStore.set('pins',pins);syncPins()}
 function safe(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
 function pinPopup(p){return '<strong>'+safe(p.label)+'</strong><br><button onclick="renamePin(\''+p.id+'\')">Rename</button><button class="danger-btn" onclick="removePin(\''+p.id+'\')">Delete</button>'}
 function renderPins(){
@@ -383,9 +400,13 @@ function renderLogs(){
 $('saveLog').onclick=()=>{
  if(!$('logDate').value){alert('Choose a date and time.');return}
  const logs=huntStore.get('logs',[]);
- logs.push({id:Date.now().toString(36),date:$('logDate').value,type:$('logType').value,direction:$('logDirection').value,count:+$('logCount').value||0,notes:$('logNotes').value.trim()});
- huntStore.set('logs',logs);$('logNotes').value='';renderLogs();
+ const record={id:Date.now().toString(36),date:$('logDate').value,type:$('logType').value,direction:$('logDirection').value,count:+$('logCount').value||0,notes:$('logNotes').value.trim()};
+ logs.push(record);huntStore.set('logs',logs);syncPost({action:'observation',record:{...record,location:'',weather:latestWind?latestWind.speed+' mph from '+latestWind.from:'',period:new Date(record.date).getHours()<11?'Morning':new Date(record.date).getHours()<15?'Midday':'Evening'}});$('logNotes').value='';renderLogs();
 };
+$('syncUrl').value=huntStore.get('syncUrl','');$('syncSecret').value=huntStore.get('syncSecret','');
+if($('syncUrl').value&&$('syncSecret').value)$('syncStatus').textContent='Sync configured. New observations and pin changes will be sent automatically.';
+$('saveSync').onclick=()=>{huntStore.set('syncUrl',$('syncUrl').value.trim());huntStore.set('syncSecret',$('syncSecret').value.trim());$('syncStatus').textContent='Sync settings saved on this device.'};
+$('testSync').onclick=async()=>{huntStore.set('syncUrl',$('syncUrl').value.trim());huntStore.set('syncSecret',$('syncSecret').value.trim());$('syncStatus').textContent='Sending test…';const ok=await syncPost({action:'observation',record:{date:new Date().toISOString(),type:'Sync test',count:0,direction:'Unknown',location:'Dashboard',notes:'Automatic sync connected successfully.',weather:'',period:''}});if(ok)$('syncStatus').textContent='Test sent. Check the Observations tab for a Sync test row.'};
 const logNow=new Date();$('logDate').value=new Date(logNow-logNow.getTimezoneOffset()*60000).toISOString().slice(0,16);renderLogs();
 $('exportData').onclick=()=>{
  const data={pins:huntStore.get('pins',[]),logs:huntStore.get('logs',[]),center:huntStore.get('center',null),zoom:huntStore.get('zoom',null)};
